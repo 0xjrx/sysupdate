@@ -4,7 +4,6 @@
 ![Language](https://img.shields.io/badge/Language-C-blue)
 ![Platform](https://img.shields.io/badge/Platform-Linux-green)
 
-# A proof-of-concept implementation emulating sophisticated infiltration and persistence methods used by Linux-based trojans in the wild
 
 ## 🚨 Educational Purpose Only
 This project demonstrates advanced Linux system infiltration techniques. **For security research and educational purposes only.**
