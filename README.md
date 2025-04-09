@@ -71,6 +71,8 @@ for (int i = 2; i > 0; i--) {
   action_indices[j] = temp;
 }
 ```
+## Flattened Structure
+![image](https://github.com/user-attachments/assets/690d557b-82b0-4531-9850-cd3dbdab329a)
 
 ## 🔍 Usage Warning
 
