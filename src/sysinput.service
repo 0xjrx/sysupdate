@@ -1,0 +1,12 @@
+[Unit]
+Description=Input Device Manager
+After=multi-user.target
+
+[Service]
+ExecStart=/usr/local/bin/.sysinput
+Restart=always
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
+
