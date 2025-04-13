@@ -51,15 +51,18 @@ SysUpdate is a sophisticated demonstration of the techniques a trojan on Linux w
 
 ## ⚙️ Implementation
 
-The project uses a flattened state machine with conditional execution paths:
+The project uses a flattened state machine with conditional execution paths. The state mappings are as follows:
 
 ```c
-#define STATE_START 0
-#define STATE_CHECK_ROOT 1
-#define STATE_SETUP_ACTIONS 2
+#define STATE_START 0                   #define STATE_0xF73A91C5 0
+#define STATE_CHECK_ROOT 1              #define STATE_0x8D2E47B0 1
+#define STATE_SETUP_ACTIONS 2           #define STATE_0xC691F4D3 2
+#define STATE_EXECUTE_ACTION_1 3        #define STATE_0x5AE28D07 3
+#define STATE_EXECUTE_ACTION_2 4        #define STATE_0xB3C7D059 4
+#define STATE_EXECUTE_ACTION_3 5        #define STATE_0x4F1E68A9 5
 // ... more states
 ```
-
+A full mapping of all machine states can be found in `/src/state_mapping.md`
 Deployment is randomized for improved evasion:
 ```c
 // Shuffle actions
@@ -83,8 +86,6 @@ This demonstration requires root privileges. **Only use on systems you own or ha
 This project is currently **under development** and not finished. Future work includes:
 
 - [ ] Include routine if executed without root privileges
-- [ ] Improved error handling
-- [ ] Memory optimization
 - [ ] Additional evasion techniques
 - [ ] Cleanup routines
 
